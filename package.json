@@ -2,7 +2,9 @@
   "name": "lamdera-db",
   "private": true,
   "scripts": {
-    "script": "elm-pages run"
+    "test": "bash test.sh",
+    "script": "elm-pages run",
+    "schema:snapshot": "bash snapshot.sh"
   },
   "devDependencies": {
     "elm-pages": "^3.1.5",

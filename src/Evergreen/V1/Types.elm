@@ -1,4 +1,4 @@
-module Types exposing (..)
+module Evergreen.V1.Types exposing (..)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
@@ -21,7 +21,6 @@ type alias Todo =
     { id : Int
     , title : String
     , completed : Bool
-    , createdAt : Int
     }
 
 

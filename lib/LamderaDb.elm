@@ -4,11 +4,12 @@ import Backend
 import BackendTask exposing (BackendTask)
 import BackendTask.Custom
 import Base64
-import Bytes exposing (Bytes)
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
+import SchemaVersion
 import Types exposing (BackendModel)
 
 
@@ -16,23 +17,47 @@ get : BackendTask FatalError BackendModel
 get =
     load
         |> BackendTask.andThen
-            (\maybeBase64 ->
-                case maybeBase64 of
+            (\maybeJson ->
+                case maybeJson of
                     Nothing ->
                         BackendTask.succeed (Tuple.first Backend.init)
 
-                    Just b64 ->
-                        case b64 |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
-                            Just model ->
-                                BackendTask.succeed model
-
-                            Nothing ->
+                    Just json ->
+                        case Decode.decodeString envelopeDecoder json of
+                            Err decodeErr ->
                                 BackendTask.fail
                                     (FatalError.build
-                                        { title = "db.bin decode failed"
-                                        , body = "Failed to decode db.bin. This can happen if your BackendModel type has changed since the last save. Delete db.bin to start fresh from Backend.init, or run Lamdera migrations first."
+                                        { title = "db.bin envelope decode failed"
+                                        , body = "Could not parse db.bin JSON envelope: " ++ Decode.errorToString decodeErr
                                         }
                                     )
+
+                            Ok envelope ->
+                                if envelope.v /= SchemaVersion.current then
+                                    BackendTask.fail
+                                        (FatalError.build
+                                            { title = "Schema version mismatch"
+                                            , body =
+                                                "db.bin is at version "
+                                                    ++ String.fromInt envelope.v
+                                                    ++ " but schema is version "
+                                                    ++ String.fromInt SchemaVersion.current
+                                                    ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                            }
+                                        )
+
+                                else
+                                    case envelope.d |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
+                                        Just model ->
+                                            BackendTask.succeed model
+
+                                        Nothing ->
+                                            BackendTask.fail
+                                                (FatalError.build
+                                                    { title = "db.bin decode failed"
+                                                    , body = "Failed to decode db.bin data. The Wire3 codec could not decode the stored bytes."
+                                                    }
+                                                )
             )
 
 
@@ -48,18 +73,15 @@ update fn =
                     bytes =
                         Wire.bytesEncode (Types.w3_encode_BackendModel newModel)
                 in
-                case Base64.fromBytes bytes of
-                    Just b64 ->
-                        save b64
-
-                    Nothing ->
-                        BackendTask.fail
-                            (FatalError.build
-                                { title = "db.bin encode failed"
-                                , body = "Failed to Base64-encode the BackendModel."
-                                }
-                            )
+                LamderaDb.Migration.writeVersioned SchemaVersion.current bytes
             )
+
+
+envelopeDecoder : Decode.Decoder { v : Int, d : String }
+envelopeDecoder =
+    Decode.map2 (\v d -> { v = v, d = d })
+        (Decode.field "v" Decode.int)
+        (Decode.field "d" Decode.string)
 
 
 load : BackendTask FatalError (Maybe String)
@@ -67,14 +89,5 @@ load =
     BackendTask.Custom.run "loadDbState"
         Encode.null
         (Decode.nullable Decode.string)
-        |> BackendTask.allowFatal
-        |> BackendTask.quiet
-
-
-save : String -> BackendTask FatalError ()
-save b64 =
-    BackendTask.Custom.run "saveDbState"
-        (Encode.string b64)
-        (Decode.succeed ())
         |> BackendTask.allowFatal
         |> BackendTask.quiet

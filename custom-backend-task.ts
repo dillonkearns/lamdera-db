@@ -11,10 +11,10 @@ const DB_FILE = path.join(PROJECT_ROOT, "db.bin");
 
 export async function loadDbState(): Promise<string | null> {
   if (!fs.existsSync(DB_FILE)) return null;
-  return fs.readFileSync(DB_FILE).toString("base64");
+  return fs.readFileSync(DB_FILE, "utf-8");
 }
 
-export async function saveDbState(b64: string): Promise<null> {
-  fs.writeFileSync(DB_FILE, Buffer.from(b64, "base64"));
+export async function saveDbState(json: string): Promise<null> {
+  fs.writeFileSync(DB_FILE, json, "utf-8");
   return null;
 }
