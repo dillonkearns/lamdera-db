@@ -3,9 +3,8 @@ module LamderaDb exposing (get, update)
 import Backend
 import BackendTask exposing (BackendTask)
 import BackendTask.Custom
+import Base64
 import Bytes exposing (Bytes)
-import Bytes.Decode
-import Bytes.Encode
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -17,13 +16,13 @@ get : BackendTask FatalError BackendModel
 get =
     load
         |> BackendTask.andThen
-            (\maybeInts ->
-                case maybeInts of
+            (\maybeBase64 ->
+                case maybeBase64 of
                     Nothing ->
                         BackendTask.succeed (Tuple.first Backend.init)
 
-                    Just ints ->
-                        case ints |> intListToBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
+                    Just b64 ->
+                        case b64 |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
                             Just model ->
                                 BackendTask.succeed model
 
@@ -49,58 +48,33 @@ update fn =
                     bytes =
                         Wire.bytesEncode (Types.w3_encode_BackendModel newModel)
                 in
-                save (bytesToIntList bytes)
+                case Base64.fromBytes bytes of
+                    Just b64 ->
+                        save b64
+
+                    Nothing ->
+                        BackendTask.fail
+                            (FatalError.build
+                                { title = "db.bin encode failed"
+                                , body = "Failed to Base64-encode the BackendModel."
+                                }
+                            )
             )
 
 
-load : BackendTask FatalError (Maybe (List Int))
+load : BackendTask FatalError (Maybe String)
 load =
     BackendTask.Custom.run "loadDbState"
         Encode.null
-        (Decode.nullable (Decode.list Decode.int))
+        (Decode.nullable Decode.string)
         |> BackendTask.allowFatal
         |> BackendTask.quiet
 
 
-save : List Int -> BackendTask FatalError ()
-save intList =
+save : String -> BackendTask FatalError ()
+save b64 =
     BackendTask.Custom.run "saveDbState"
-        (Encode.list Encode.int intList)
+        (Encode.string b64)
         (Decode.succeed ())
         |> BackendTask.allowFatal
         |> BackendTask.quiet
-
-
-
--- Internal helpers: convert Bytes <-> List Int for JSON transport
-
-
-bytesToIntList : Bytes -> List Int
-bytesToIntList bytes =
-    let
-        width =
-            Bytes.width bytes
-
-        decoder =
-            Bytes.Decode.loop ( width, [] )
-                (\( remaining, acc ) ->
-                    if remaining <= 0 then
-                        Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse acc))
-
-                    else
-                        Bytes.Decode.map
-                            (\byte -> Bytes.Decode.Loop ( remaining - 1, byte :: acc ))
-                            Bytes.Decode.unsignedInt8
-                )
-    in
-    Bytes.Decode.decode decoder bytes
-        |> Maybe.withDefault []
-
-
-intListToBytes : List Int -> Maybe Bytes
-intListToBytes ints =
-    ints
-        |> List.map Bytes.Encode.unsignedInt8
-        |> Bytes.Encode.sequence
-        |> Bytes.Encode.encode
-        |> Just

@@ -9,12 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const PROJECT_ROOT = path.resolve(path.dirname(__filename), "..", "..");
 const DB_FILE = path.join(PROJECT_ROOT, "db.bin");
 
-export async function loadDbState(): Promise<number[] | null> {
+export async function loadDbState(): Promise<string | null> {
   if (!fs.existsSync(DB_FILE)) return null;
-  return Array.from(fs.readFileSync(DB_FILE));
+  return fs.readFileSync(DB_FILE).toString("base64");
 }
 
-export async function saveDbState(bytes: number[]): Promise<null> {
-  fs.writeFileSync(DB_FILE, Buffer.from(bytes));
+export async function saveDbState(b64: string): Promise<null> {
+  fs.writeFileSync(DB_FILE, Buffer.from(b64, "base64"));
   return null;
 }
