@@ -1,0 +1,12 @@
+{
+  "name": "lamdera-db",
+  "private": true,
+  "scripts": {
+    "script": "elm-pages run"
+  },
+  "devDependencies": {
+    "elm-pages": "^3.1.5",
+    "elm-review": "^2.13.5",
+    "lamdera": "^0.19.1-1.4.0"
+  }
+}
