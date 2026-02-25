@@ -16,12 +16,24 @@ import Types exposing (BackendModel)
 get : BackendTask FatalError BackendModel
 get =
     load
-        |> BackendTask.map
+        |> BackendTask.andThen
             (\maybeInts ->
-                maybeInts
-                    |> Maybe.andThen intListToBytes
-                    |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel)
-                    |> Maybe.withDefault (Tuple.first Backend.init)
+                case maybeInts of
+                    Nothing ->
+                        BackendTask.succeed (Tuple.first Backend.init)
+
+                    Just ints ->
+                        case ints |> intListToBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
+                            Just model ->
+                                BackendTask.succeed model
+
+                            Nothing ->
+                                BackendTask.fail
+                                    (FatalError.build
+                                        { title = "db.bin decode failed"
+                                        , body = "Failed to decode db.bin. This can happen if your BackendModel type has changed since the last save. Delete db.bin to start fresh from Backend.init, or run Lamdera migrations first."
+                                        }
+                                    )
             )
 
 
