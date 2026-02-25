@@ -58,8 +58,12 @@ echo "✓ Phase 1: V1 data reads OK"
 restore_v2
 
 # Verify LamderaDb.get REJECTS V1 data (version mismatch)
-if npx elm-pages run script/MigrationTest.elm 2>/dev/null; then
-    echo "✗ FAIL: Should have rejected V1 data with V2 schema"
+phase2_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase2_output" | grep -qi "schema version mismatch"; then
+    : # expected
+else
+    echo "✗ FAIL: Expected 'Schema version mismatch' error, got:"
+    echo "$phase2_output"
     exit 1
 fi
 echo "✓ Phase 2: V1 data correctly rejected by V2 schema"
