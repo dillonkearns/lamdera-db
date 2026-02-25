@@ -15,10 +15,7 @@ import Types exposing (BackendModel)
 
 get : BackendTask FatalError BackendModel
 get =
-    BackendTask.Custom.run "loadDbState"
-        Encode.null
-        (Decode.nullable (Decode.list Decode.int))
-        |> BackendTask.allowFatal
+    load
         |> BackendTask.map
             (\maybeInts ->
                 maybeInts
@@ -40,11 +37,26 @@ update fn =
                     bytes =
                         Wire.bytesEncode (Types.w3_encode_BackendModel newModel)
                 in
-                BackendTask.Custom.run "saveDbState"
-                    (Encode.list Encode.int (bytesToIntList bytes))
-                    (Decode.succeed ())
-                    |> BackendTask.allowFatal
+                save (bytesToIntList bytes)
             )
+
+
+load : BackendTask FatalError (Maybe (List Int))
+load =
+    BackendTask.Custom.run "loadDbState"
+        Encode.null
+        (Decode.nullable (Decode.list Decode.int))
+        |> BackendTask.allowFatal
+        |> BackendTask.quiet
+
+
+save : List Int -> BackendTask FatalError ()
+save intList =
+    BackendTask.Custom.run "saveDbState"
+        (Encode.list Encode.int intList)
+        (Decode.succeed ())
+        |> BackendTask.allowFatal
+        |> BackendTask.quiet
 
 
 
