@@ -22,6 +22,17 @@ export async function saveDbState(json: string): Promise<null> {
   return null;
 }
 
+export async function updateTypesFingerprint(currentTypes: string): Promise<null> {
+  if (!fs.existsSync(DB_FILE)) return null;
+  try {
+    const raw = fs.readFileSync(DB_FILE, "utf-8");
+    const envelope = JSON.parse(raw);
+    envelope.t = currentTypes;
+    fs.writeFileSync(DB_FILE, JSON.stringify(envelope), "utf-8");
+  } catch {}
+  return null;
+}
+
 export async function backupDbBin(): Promise<null> {
   if (fs.existsSync(DB_FILE)) {
     fs.copyFileSync(DB_FILE, DB_FILE + ".backup");
@@ -236,13 +247,6 @@ export async function compareBackendModelShape(args: {
       .digest("hex");
 
     if (storedHash === currentHash) {
-      // Update stored fingerprint so future reads hit the fast path
-      try {
-        const raw = fs.readFileSync(DB_FILE, "utf-8");
-        const envelope = JSON.parse(raw);
-        envelope.t = args.currentTypes;
-        fs.writeFileSync(DB_FILE, JSON.stringify(envelope), "utf-8");
-      } catch {}
       return { result: "Same" };
     }
     return { result: "Different" };

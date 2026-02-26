@@ -142,7 +142,8 @@ verifyTypes currentTypes storedTypes onSame =
                 (\result ->
                     case result of
                         Same ->
-                            onSame
+                            updateTypesFingerprint currentTypes
+                                |> BackendTask.andThen (\_ -> onSame)
 
                         Different ->
                             BackendTask.fail
@@ -160,6 +161,19 @@ verifyTypes currentTypes storedTypes onSame =
                                     }
                                 )
                 )
+
+
+{-| Explicitly update the stored types fingerprint in db.bin so that
+subsequent reads hit the fast path (text equality) and skip the deep check.
+Called after a deep compare confirms the types are structurally identical.
+-}
+updateTypesFingerprint : String -> BackendTask FatalError ()
+updateTypesFingerprint currentTypes =
+    BackendTask.Custom.run "updateTypesFingerprint"
+        (Encode.string currentTypes)
+        (Decode.succeed ())
+        |> BackendTask.allowFatal
+        |> BackendTask.quiet
 
 
 deepCompare : String -> String -> BackendTask FatalError DeepCompareResult
