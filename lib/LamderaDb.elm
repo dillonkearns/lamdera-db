@@ -15,6 +15,12 @@ import SchemaVersion
 import Types exposing (BackendModel)
 
 
+type DeepCompareResult
+    = Same
+    | Different
+    | DeepCheckError String
+
+
 script : BackendTask FatalError () -> Script
 script task =
     Script.withoutCliOptions
@@ -59,16 +65,7 @@ get =
                                 else
                                     case envelope.t of
                                         Just storedTypes ->
-                                            if storedTypes /= currentTypes then
-                                                BackendTask.fail
-                                                    (FatalError.build
-                                                        { title = "Types.elm has changed"
-                                                        , body = "src/Types.elm has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
-                                                        }
-                                                    )
-
-                                            else
-                                                decodeModel envelope.d
+                                            verifyTypes currentTypes storedTypes (decodeModel envelope.d)
 
                                         Nothing ->
                                             -- Old db.bin without types fingerprint; skip check
@@ -128,20 +125,71 @@ checkMigration =
                                 else
                                     case envelope.t of
                                         Just storedTypes ->
-                                            if storedTypes /= currentTypes then
-                                                BackendTask.fail
-                                                    (FatalError.build
-                                                        { title = "Types.elm has changed"
-                                                        , body = "src/Types.elm has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
-                                                        }
-                                                    )
-
-                                            else
-                                                BackendTask.succeed ()
+                                            verifyTypes currentTypes storedTypes (BackendTask.succeed ())
 
                                         Nothing ->
                                             BackendTask.succeed ()
             )
+
+
+verifyTypes : String -> String -> BackendTask FatalError a -> BackendTask FatalError a
+verifyTypes currentTypes storedTypes onSame =
+    if storedTypes == currentTypes then
+        onSame
+
+    else
+        deepCompare storedTypes currentTypes
+            |> BackendTask.andThen
+                (\result ->
+                    case result of
+                        Same ->
+                            onSame
+
+                        Different ->
+                            BackendTask.fail
+                                (FatalError.build
+                                    { title = "Types.elm has changed"
+                                    , body = "BackendModel has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                    }
+                                )
+
+                        DeepCheckError message ->
+                            BackendTask.fail
+                                (FatalError.build
+                                    { title = "Could not verify schema compatibility"
+                                    , body = message
+                                    }
+                                )
+                )
+
+
+deepCompare : String -> String -> BackendTask FatalError DeepCompareResult
+deepCompare storedTypes currentTypes =
+    BackendTask.Custom.run "compareBackendModelShape"
+        (Encode.object
+            [ ( "storedTypes", Encode.string storedTypes )
+            , ( "currentTypes", Encode.string currentTypes )
+            ]
+        )
+        (Decode.field "result" Decode.string
+            |> Decode.andThen
+                (\result ->
+                    case result of
+                        "Same" ->
+                            Decode.succeed Same
+
+                        "Different" ->
+                            Decode.succeed Different
+
+                        "Error" ->
+                            Decode.field "message" Decode.string
+                                |> Decode.map DeepCheckError
+
+                        _ ->
+                            Decode.fail ("Unknown deep compare result: " ++ result)
+                )
+        )
+        |> BackendTask.allowFatal
 
 
 decodeModel : String -> BackendTask FatalError BackendModel

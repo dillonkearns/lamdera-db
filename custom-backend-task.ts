@@ -1,5 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
+import * as os from "os";
+import { execSync } from "child_process";
 import { fileURLToPath } from "node:url";
 
 // Resolve relative to this file's location, not process.cwd().
@@ -101,6 +104,107 @@ export async function runSnapshot(): Promise<{
   files.push("lib/SchemaVersion.elm");
 
   return { previousVersion: N, newVersion: K, files };
+}
+
+export async function compareBackendModelShape(args: {
+  storedTypes: string;
+  currentTypes: string;
+}): Promise<{ result: "Same" | "Different" | "Error"; message?: string }> {
+  const tmpTypes = path.join(PROJECT_ROOT, "script", "LamderaDbDeepCheckTmpTypes.elm");
+  const tmpWitness = path.join(PROJECT_ROOT, "script", "LamderaDbDeepCheckTmpWitness.elm");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lamdera-deep-check-"));
+
+  const witnessContent = [
+    "module LamderaDbDeepCheckTmpWitness exposing (main)",
+    "",
+    "import LamderaDbDeepCheckTmpTypes exposing (..)",
+    "import Platform",
+    "",
+    "main =",
+    '    Platform.worker',
+    '        { init = \\() -> ( w3_encode_BackendModel, Cmd.none )',
+    '        , update = \\_ m -> ( m, Cmd.none )',
+    '        , subscriptions = \\_ -> Sub.none',
+    '        }',
+    "",
+  ].join("\n");
+
+  try {
+    // --- Compile stored types ---
+    const storedModule = args.storedTypes.replace(
+      /^module Types/m,
+      "module LamderaDbDeepCheckTmpTypes"
+    );
+    fs.writeFileSync(tmpTypes, storedModule, "utf-8");
+    fs.writeFileSync(tmpWitness, witnessContent, "utf-8");
+
+    const storedJs = path.join(tmpDir, "stored.js");
+    try {
+      execSync(
+        `lamdera make script/LamderaDbDeepCheckTmpWitness.elm --output=${storedJs}`,
+        { cwd: PROJECT_ROOT, stdio: "pipe" }
+      );
+    } catch (e: any) {
+      return {
+        result: "Error",
+        message: "Failed to compile stored types: " + (e.stderr?.toString() || e.message),
+      };
+    }
+
+    const storedHash = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(storedJs))
+      .digest("hex");
+
+    // --- Compile current types ---
+    const currentModule = args.currentTypes.replace(
+      /^module Types/m,
+      "module LamderaDbDeepCheckTmpTypes"
+    );
+    fs.writeFileSync(tmpTypes, currentModule, "utf-8");
+
+    const currentJs = path.join(tmpDir, "current.js");
+    try {
+      execSync(
+        `lamdera make script/LamderaDbDeepCheckTmpWitness.elm --output=${currentJs}`,
+        { cwd: PROJECT_ROOT, stdio: "pipe" }
+      );
+    } catch (e: any) {
+      return {
+        result: "Error",
+        message: "Failed to compile current types: " + (e.stderr?.toString() || e.message),
+      };
+    }
+
+    const currentHash = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(currentJs))
+      .digest("hex");
+
+    return { result: storedHash === currentHash ? "Same" : "Different" };
+  } catch (e: any) {
+    return {
+      result: "Error",
+      message: "Deep check failed: " + e.message,
+    };
+  } finally {
+    // Clean up temp .elm files
+    try { fs.unlinkSync(tmpTypes); } catch {}
+    try { fs.unlinkSync(tmpWitness); } catch {}
+    // Clean up temp JS output dir
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+    // Clean up elm-stuff artifacts for the tmp modules
+    const elmStuffGenerated = path.join(PROJECT_ROOT, "elm-stuff", "generated-code");
+    if (fs.existsSync(elmStuffGenerated)) {
+      try {
+        // Remove compiled artifacts that reference our temp modules
+        // The simplest approach: remove the 0.19.1 directory to force recompilation
+        // This is safe because elm-pages will regenerate it on next run
+        const iDat = path.join(elmStuffGenerated, "elm-community", "elm-pages", "v3", "0.19.1", "i.dat");
+        try { fs.unlinkSync(iDat); } catch {}
+      } catch {}
+    }
+  }
 }
 
 function generateMigrateElm(N: number): string {

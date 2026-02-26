@@ -33,6 +33,7 @@ cleanup() {
     restore_v2
     rm -f db.bin
     rm -f script/TestVerifyV3.elm
+    rm -f script/LamderaDbDeepCheckTmpTypes.elm script/LamderaDbDeepCheckTmpWitness.elm
     rm -rf "$backup_dir"
 }
 trap cleanup EXIT
@@ -126,6 +127,49 @@ if echo "$phase4b_output" | grep -qi "BackendModel loaded"; then
     exit 1
 fi
 echo "✓ Phase 4b: V2 schema change without version bump correctly rejected"
+
+# === Phase 4c: Comment-only Types.elm change → allowed ===
+# Start with clean V2 state and V2 data
+restore_v2
+rm -f db.bin
+npx elm-pages run script/SeedDb.elm
+
+# Copy V2 types with only a comment added
+cp test/fixtures/v2-comment-only/Types.elm src/Types.elm
+
+phase4c_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase4c_output" | grep -qi "BackendModel loaded"; then
+    : # expected — comment-only change should be allowed
+else
+    echo "✗ FAIL: Comment-only Types.elm change should have been allowed"
+    echo "  Got: $phase4c_output"
+    exit 1
+fi
+echo "✓ Phase 4c: Comment-only Types.elm change correctly allowed"
+
+# Restore V2 files
+restore_v2
+
+# === Phase 4d: Frontend-only type change → allowed ===
+# Re-seed V2 data
+rm -f db.bin
+npx elm-pages run script/SeedDb.elm
+
+# Copy V2 types with FrontendModel change only
+cp test/fixtures/v2-frontend-change/Types.elm src/Types.elm
+
+phase4d_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase4d_output" | grep -qi "BackendModel loaded"; then
+    : # expected — frontend-only change should be allowed
+else
+    echo "✗ FAIL: Frontend-only Types.elm change should have been allowed"
+    echo "  Got: $phase4d_output"
+    exit 1
+fi
+echo "✓ Phase 4d: Frontend-only Types.elm change correctly allowed"
+
+# Restore V2 files for clean state
+restore_v2
 
 # === Phase 5: V2→V3 migration via Snapshot.elm ===
 # Start with clean V2 state and V2 data
