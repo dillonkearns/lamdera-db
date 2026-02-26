@@ -9,7 +9,7 @@ import Types exposing (BackendModel, Todo)
 
 run : Script
 run =
-    Script.withoutCliOptions
+    LamderaDb.script
         (LamderaDb.get
             |> BackendTask.andThen verify
         )

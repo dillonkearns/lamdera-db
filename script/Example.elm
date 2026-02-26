@@ -8,7 +8,7 @@ import Pages.Script as Script exposing (Script)
 
 run : Script
 run =
-    Script.withoutCliOptions loop
+    LamderaDb.script loop
 
 
 loop : BackendTask FatalError ()

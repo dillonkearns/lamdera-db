@@ -1,4 +1,4 @@
-module LamderaDb exposing (get, update)
+module LamderaDb exposing (get, script, update)
 
 import Backend
 import BackendTask exposing (BackendTask)
@@ -10,8 +10,17 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
+import Pages.Script as Script exposing (Script)
 import SchemaVersion
 import Types exposing (BackendModel)
+
+
+script : BackendTask FatalError () -> Script
+script task =
+    Script.withoutCliOptions
+        (checkMigration
+            |> BackendTask.andThen (\_ -> task)
+        )
 
 
 get : BackendTask FatalError BackendModel
@@ -67,21 +76,6 @@ get =
             )
 
 
-decodeModel : String -> BackendTask FatalError BackendModel
-decodeModel b64 =
-    case b64 |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
-        Just model ->
-            BackendTask.succeed model
-
-        Nothing ->
-            BackendTask.fail
-                (FatalError.build
-                    { title = "db.bin decode failed"
-                    , body = "Failed to decode db.bin data. The Wire3 codec could not decode the stored bytes."
-                    }
-                )
-
-
 update : (BackendModel -> BackendModel) -> BackendTask FatalError ()
 update fn =
     get
@@ -96,6 +90,73 @@ update fn =
                 in
                 LamderaDb.Migration.writeVersioned SchemaVersion.current bytes
             )
+
+
+{-| Check for pending migrations without loading the model.
+Reads the db.bin envelope and compares version + Types.elm fingerprint.
+-}
+checkMigration : BackendTask FatalError ()
+checkMigration =
+    BackendTask.map2 Tuple.pair load readTypesElm
+        |> BackendTask.andThen
+            (\( maybeJson, currentTypes ) ->
+                case maybeJson of
+                    Nothing ->
+                        -- No db.bin yet, nothing to check
+                        BackendTask.succeed ()
+
+                    Just json ->
+                        case Decode.decodeString envelopeDecoder json of
+                            Err _ ->
+                                -- Envelope is corrupt; get will report the details
+                                BackendTask.succeed ()
+
+                            Ok envelope ->
+                                if envelope.v /= SchemaVersion.current then
+                                    BackendTask.fail
+                                        (FatalError.build
+                                            { title = "Schema version mismatch"
+                                            , body =
+                                                "db.bin is at version "
+                                                    ++ String.fromInt envelope.v
+                                                    ++ " but schema is version "
+                                                    ++ String.fromInt SchemaVersion.current
+                                                    ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                            }
+                                        )
+
+                                else
+                                    case envelope.t of
+                                        Just storedTypes ->
+                                            if storedTypes /= currentTypes then
+                                                BackendTask.fail
+                                                    (FatalError.build
+                                                        { title = "Types.elm has changed"
+                                                        , body = "src/Types.elm has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                                        }
+                                                    )
+
+                                            else
+                                                BackendTask.succeed ()
+
+                                        Nothing ->
+                                            BackendTask.succeed ()
+            )
+
+
+decodeModel : String -> BackendTask FatalError BackendModel
+decodeModel b64 =
+    case b64 |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
+        Just model ->
+            BackendTask.succeed model
+
+        Nothing ->
+            BackendTask.fail
+                (FatalError.build
+                    { title = "db.bin decode failed"
+                    , body = "Failed to decode db.bin data. The Wire3 codec could not decode the stored bytes."
+                    }
+                )
 
 
 envelopeDecoder : Decode.Decoder { v : Int, t : Maybe String, d : String }

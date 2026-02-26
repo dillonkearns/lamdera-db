@@ -8,7 +8,7 @@ import Pages.Script as Script exposing (Script)
 
 run : Script
 run =
-    Script.withoutCliOptions
+    LamderaDb.script
         (LamderaDb.get
             |> BackendTask.andThen
                 (\model ->
