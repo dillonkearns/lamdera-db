@@ -252,6 +252,63 @@ echo "✓ Phase 5b: V1→V2→V3 chaining migration completed"
 npx elm-pages run script/TestVerifyV3.elm
 echo "✓ Phase 5b: V1→V3 chained migration verified — all values correct"
 
+# === Phase 6: Snapshot AFTER changing Types.elm (natural user workflow) ===
+# This tests the realistic flow where the user:
+#   1. Has V1 data in db.bin (first version, no Evergreen artifacts yet)
+#   2. Changes src/Types.elm to V2 (adds a field)
+#   3. Runs Snapshot.elm
+#   4. Implements migration, runs Migrate.elm
+# Snapshot must snapshot the OLD V1 types (from db.bin), not current V2 src/Types.elm.
+
+# Start with clean V1 state
+cp test/fixtures/v1/Types.elm src/Types.elm
+cp test/fixtures/v1/Backend.elm src/Backend.elm
+cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v1/Example.elm script/Example.elm
+cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
+rm -f script/Migrate.elm script/TestVerifyMigration.elm script/TestVerifyV3.elm
+rm -rf src/Evergreen
+rm -f db.bin
+
+npx elm-pages run script/SeedDb.elm
+echo "✓ Phase 6: Seeded V1 data"
+
+# User changes Types.elm to V2 BEFORE running Snapshot (natural workflow)
+cp "$backup_dir/Types.elm" src/Types.elm
+cp "$backup_dir/Backend.elm" src/Backend.elm
+cp "$backup_dir/SeedDb.elm" script/SeedDb.elm
+cp "$backup_dir/Example.elm" script/Example.elm
+# SchemaVersion stays at 1 — user hasn't run Snapshot yet
+# No Evergreen artifacts — this is the user's first migration
+
+# Run Snapshot — should snapshot OLD V1 types from db.bin, not current V2 src/Types.elm
+npx elm-pages run script/Snapshot.elm
+echo "✓ Phase 6: Snapshot completed after Types.elm change"
+
+# Install the real V2 migration (replace the generated stub)
+cp "$backup_dir/Evergreen/Migrate/V2.elm" src/Evergreen/Migrate/V2.elm
+
+# Run migration — should succeed if Snapshot captured the old V1 types correctly
+phase6_output=$(npx elm-pages run script/Migrate.elm 2>&1 || true)
+if echo "$phase6_output" | grep -qi "Migrated db.bin to version"; then
+    echo "✓ Phase 6: V1→V2 migration completed (natural workflow)"
+else
+    echo "✗ FAIL: Snapshot after Types.elm change should produce working migration"
+    echo "  Snapshot should read old types from db.bin, not current src/Types.elm"
+    echo "  Got: $phase6_output"
+    exit 1
+fi
+
+# Verify migrated data reads correctly
+phase6_verify=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase6_verify" | grep -qi "BackendModel loaded"; then
+    echo "✓ Phase 6: Migrated data verified — natural workflow works correctly"
+else
+    echo "✗ FAIL: Could not read data after natural-workflow migration"
+    echo "  Got: $phase6_verify"
+    exit 1
+fi
+
 rm -f db.bin
 echo ""
 echo "=== All migration tests passed! ==="

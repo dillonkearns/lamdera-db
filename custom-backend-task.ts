@@ -38,12 +38,28 @@ export async function runSnapshot(): Promise<{
   const K = N + 1;
 
   // 2. Create snapshot: src/Evergreen/V{N}/Types.elm
+  // Prefer stored types from db.bin (user may have already changed src/Types.elm)
   const snapshotDir = path.join(PROJECT_ROOT, "src", "Evergreen", `V${N}`);
   fs.mkdirSync(snapshotDir, { recursive: true });
-  const typesContent = fs.readFileSync(
-    path.join(PROJECT_ROOT, "src", "Types.elm"),
-    "utf-8"
-  );
+  let typesContent: string;
+  try {
+    const dbRaw = fs.readFileSync(DB_FILE, "utf-8");
+    const envelope = JSON.parse(dbRaw);
+    if (typeof envelope.t === "string") {
+      typesContent = envelope.t;
+    } else {
+      typesContent = fs.readFileSync(
+        path.join(PROJECT_ROOT, "src", "Types.elm"),
+        "utf-8"
+      );
+    }
+  } catch {
+    // No db.bin or unreadable — use current src/Types.elm (pre-change snapshot)
+    typesContent = fs.readFileSync(
+      path.join(PROJECT_ROOT, "src", "Types.elm"),
+      "utf-8"
+    );
+  }
   const snapshotContent = typesContent.replace(
     /^module Types/,
     `module Evergreen.V${N}.Types`
