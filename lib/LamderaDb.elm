@@ -149,7 +149,7 @@ verifyTypes currentTypes storedTypes onSame =
                             BackendTask.fail
                                 (FatalError.build
                                     { title = "Types.elm has changed"
-                                    , body = "BackendModel has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                    , body = "BackendModel has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Snapshot.elm"
                                     }
                                 )
 

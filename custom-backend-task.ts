@@ -181,7 +181,17 @@ export async function compareBackendModelShape(args: {
       .update(fs.readFileSync(currentJs))
       .digest("hex");
 
-    return { result: storedHash === currentHash ? "Same" : "Different" };
+    if (storedHash === currentHash) {
+      // Update stored fingerprint so future reads hit the fast path
+      try {
+        const raw = fs.readFileSync(DB_FILE, "utf-8");
+        const envelope = JSON.parse(raw);
+        envelope.t = args.currentTypes;
+        fs.writeFileSync(DB_FILE, JSON.stringify(envelope), "utf-8");
+      } catch {}
+      return { result: "Same" };
+    }
+    return { result: "Different" };
   } catch (e: any) {
     return {
       result: "Error",
@@ -193,17 +203,6 @@ export async function compareBackendModelShape(args: {
     try { fs.unlinkSync(tmpWitness); } catch {}
     // Clean up temp JS output dir
     try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
-    // Clean up elm-stuff artifacts for the tmp modules
-    const elmStuffGenerated = path.join(PROJECT_ROOT, "elm-stuff", "generated-code");
-    if (fs.existsSync(elmStuffGenerated)) {
-      try {
-        // Remove compiled artifacts that reference our temp modules
-        // The simplest approach: remove the 0.19.1 directory to force recompilation
-        // This is safe because elm-pages will regenerate it on next run
-        const iDat = path.join(elmStuffGenerated, "elm-community", "elm-pages", "v3", "0.19.1", "i.dat");
-        try { fs.unlinkSync(iDat); } catch {}
-      } catch {}
-    }
   }
 }
 

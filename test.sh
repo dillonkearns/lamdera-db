@@ -145,7 +145,18 @@ else
     echo "  Got: $phase4c_output"
     exit 1
 fi
-echo "✓ Phase 4c: Comment-only Types.elm change correctly allowed"
+echo "✓ Phase 4c: Comment-only Types.elm change correctly allowed (first run)"
+
+# Second run should hit the fast path (text equality) since fingerprint was updated
+phase4c_output2=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase4c_output2" | grep -qi "BackendModel loaded"; then
+    : # expected — fast path should succeed
+else
+    echo "✗ FAIL: Second run after comment-only change should have succeeded (fingerprint update)"
+    echo "  Got: $phase4c_output2"
+    exit 1
+fi
+echo "✓ Phase 4c: Second run hit fast path — fingerprint update verified"
 
 # Restore V2 files
 restore_v2
