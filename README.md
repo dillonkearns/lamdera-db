@@ -38,8 +38,6 @@ lamdera-db/
 │   │   │   └── Types.elm       # Snapshot of Types.elm at V1
 │   │   └── Migrate/
 │   │       └── V2.elm          # V1 → V2 migration
-│   ├── Frontend.elm
-│   └── Env.elm
 ├── lib/
 │   ├── LamderaDb.elm           # Library code — don't edit
 │   └── SchemaVersion.elm       # Current schema version number

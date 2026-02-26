@@ -161,23 +161,23 @@ echo "✓ Phase 4c: Second run hit fast path — fingerprint update verified"
 # Restore V2 files
 restore_v2
 
-# === Phase 4d: Frontend-only type change → allowed ===
+# === Phase 4d: Non-BackendModel type change → allowed ===
 # Re-seed V2 data
 rm -f db.bin
 npx elm-pages run script/SeedDb.elm
 
-# Copy V2 types with FrontendModel change only
+# Copy V2 types with a non-BackendModel type change only
 cp test/fixtures/v2-frontend-change/Types.elm src/Types.elm
 
 phase4d_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
 if echo "$phase4d_output" | grep -qi "BackendModel loaded"; then
-    : # expected — frontend-only change should be allowed
+    : # expected — non-BackendModel change should be allowed
 else
-    echo "✗ FAIL: Frontend-only Types.elm change should have been allowed"
+    echo "✗ FAIL: Non-BackendModel Types.elm change should have been allowed"
     echo "  Got: $phase4d_output"
     exit 1
 fi
-echo "✓ Phase 4d: Frontend-only Types.elm change correctly allowed"
+echo "✓ Phase 4d: Non-BackendModel Types.elm change correctly allowed"
 
 # Restore V2 files for clean state
 restore_v2
