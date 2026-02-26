@@ -21,21 +21,7 @@ run =
                         1 ->
                             case Wire.bytesDecode Evergreen.V1.Types.w3_decode_BackendModel bytes of
                                 Just v1Model ->
-                                    let
-                                        v2Model =
-                                            MigrateV2.backendModel v1Model
-
-                                        v2Bytes =
-                                            Wire.bytesEncode (Types.w3_encode_BackendModel v2Model)
-                                    in
-                                    LamderaDb.Migration.writeVersioned SchemaVersion.current v2Bytes
-                                        |> BackendTask.andThen
-                                            (\_ ->
-                                                Script.log
-                                                    ("Migrated db.bin from version 1 to version "
-                                                        ++ String.fromInt SchemaVersion.current
-                                                    )
-                                            )
+                                    migrateFromV1 v1Model
 
                                 Nothing ->
                                     BackendTask.fail
@@ -58,3 +44,28 @@ run =
                                     )
                 )
         )
+
+
+migrateFromV1 : Evergreen.V1.Types.BackendModel -> BackendTask FatalError ()
+migrateFromV1 model =
+    let
+        currentModel =
+            MigrateV2.backendModel model
+    in
+    saveAndLog currentModel
+
+
+saveAndLog : Types.BackendModel -> BackendTask FatalError ()
+saveAndLog currentModel =
+    let
+        bytes =
+            Wire.bytesEncode (Types.w3_encode_BackendModel currentModel)
+    in
+    LamderaDb.Migration.writeVersioned SchemaVersion.current bytes
+        |> BackendTask.andThen
+            (\_ ->
+                Script.log
+                    ("Migrated db.bin to version "
+                        ++ String.fromInt SchemaVersion.current
+                    )
+            )

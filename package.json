@@ -4,7 +4,7 @@
   "scripts": {
     "test": "bash test.sh",
     "script": "elm-pages run",
-    "schema:snapshot": "bash snapshot.sh"
+    "schema:snapshot": "elm-pages run script/Snapshot.elm"
   },
   "devDependencies": {
     "elm-pages": "^3.1.5",
