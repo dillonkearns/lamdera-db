@@ -1,6 +1,5 @@
 module LamderaDb exposing (get, script, update)
 
-import Backend
 import BackendTask exposing (BackendTask)
 import BackendTask.Custom
 import BackendTask.File
@@ -12,7 +11,7 @@ import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
 import Pages.Script as Script exposing (Script)
 import SchemaVersion
-import Types exposing (BackendModel)
+import Types exposing (BackendModel, initialBackendModel)
 
 
 type DeepCompareResult
@@ -36,7 +35,7 @@ get =
             (\( maybeJson, currentTypes ) ->
                 case maybeJson of
                     Nothing ->
-                        BackendTask.succeed (Tuple.first Backend.init)
+                        BackendTask.succeed initialBackendModel
 
                     Just json ->
                         case Decode.decodeString envelopeDecoder json of

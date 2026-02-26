@@ -5,7 +5,6 @@ backup_dir=$(mktemp -d)
 
 # --- Setup: save current repo state (using cp, not mv, so originals stay for now) ---
 cp src/Types.elm "$backup_dir/"
-cp src/Backend.elm "$backup_dir/"
 cp script/SeedDb.elm "$backup_dir/"
 cp script/Example.elm "$backup_dir/"
 cp lib/SchemaVersion.elm "$backup_dir/"
@@ -16,7 +15,6 @@ cp lib/SchemaVersion.elm "$backup_dir/"
 
 restore_v2() {
     cp "$backup_dir/Types.elm" src/Types.elm
-    cp "$backup_dir/Backend.elm" src/Backend.elm
     cp "$backup_dir/SeedDb.elm" script/SeedDb.elm
     cp "$backup_dir/Example.elm" script/Example.elm
     cp "$backup_dir/SchemaVersion.elm" lib/SchemaVersion.elm
@@ -40,7 +38,6 @@ trap cleanup EXIT
 
 # === Phase 1: V1 environment ===
 cp test/fixtures/v1/Types.elm src/Types.elm
-cp test/fixtures/v1/Backend.elm src/Backend.elm
 cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
 cp test/fixtures/v1/Example.elm script/Example.elm
 cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
@@ -193,9 +190,8 @@ echo "✓ Phase 5: Seeded clean V2 data"
 npx elm-pages run script/Snapshot.elm
 echo "✓ Phase 5: Snapshot V2→V3 completed"
 
-# Install V3 types, backend, and migration
+# Install V3 types and migration
 cp test/fixtures/v3/Types.elm src/Types.elm
-cp test/fixtures/v3/Backend.elm src/Backend.elm
 cp test/fixtures/v3/SeedDb.elm script/SeedDb.elm
 cp test/fixtures/v3/Example.elm script/Example.elm
 cp test/fixtures/v3/MigrateV3.elm src/Evergreen/Migrate/V3.elm
@@ -213,7 +209,6 @@ echo "✓ Phase 5: V3 data verified — all values correct"
 # Save the V3 state that Phase 5 built
 v3_backup=$(mktemp -d)
 cp src/Types.elm "$v3_backup/"
-cp src/Backend.elm "$v3_backup/"
 cp script/SeedDb.elm "$v3_backup/"
 cp script/Example.elm "$v3_backup/"
 cp lib/SchemaVersion.elm "$v3_backup/"
@@ -222,7 +217,6 @@ cp -r src/Evergreen "$v3_backup/"
 
 # Temporarily switch to V1 env to seed V1 data
 cp test/fixtures/v1/Types.elm src/Types.elm
-cp test/fixtures/v1/Backend.elm src/Backend.elm
 cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
 cp test/fixtures/v1/Example.elm script/Example.elm
 cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
@@ -235,7 +229,6 @@ echo "✓ Phase 5b: Re-seeded V1 data"
 
 # Restore V3 state (keeping V1-seeded db.bin)
 cp "$v3_backup/Types.elm" src/Types.elm
-cp "$v3_backup/Backend.elm" src/Backend.elm
 cp "$v3_backup/SeedDb.elm" script/SeedDb.elm
 cp "$v3_backup/Example.elm" script/Example.elm
 cp "$v3_backup/SchemaVersion.elm" lib/SchemaVersion.elm
@@ -262,7 +255,6 @@ echo "✓ Phase 5b: V1→V3 chained migration verified — all values correct"
 
 # Start with clean V1 state
 cp test/fixtures/v1/Types.elm src/Types.elm
-cp test/fixtures/v1/Backend.elm src/Backend.elm
 cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
 cp test/fixtures/v1/Example.elm script/Example.elm
 cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
@@ -275,7 +267,6 @@ echo "✓ Phase 6: Seeded V1 data"
 
 # User changes Types.elm to V2 BEFORE running Snapshot (natural workflow)
 cp "$backup_dir/Types.elm" src/Types.elm
-cp "$backup_dir/Backend.elm" src/Backend.elm
 cp "$backup_dir/SeedDb.elm" script/SeedDb.elm
 cp "$backup_dir/Example.elm" script/Example.elm
 # SchemaVersion stays at 1 — user hasn't run Snapshot yet
@@ -316,7 +307,6 @@ fi
 
 # Start with V1 state + data
 cp test/fixtures/v1/Types.elm src/Types.elm
-cp test/fixtures/v1/Backend.elm src/Backend.elm
 cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
 cp test/fixtures/v1/Example.elm script/Example.elm
 cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
@@ -329,7 +319,6 @@ echo "✓ Phase 7: Seeded V1 data"
 
 # Change to V2 types and run first Snapshot (succeeds)
 cp "$backup_dir/Types.elm" src/Types.elm
-cp "$backup_dir/Backend.elm" src/Backend.elm
 cp "$backup_dir/SeedDb.elm" script/SeedDb.elm
 cp "$backup_dir/Example.elm" script/Example.elm
 

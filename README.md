@@ -13,7 +13,7 @@ Local scripting against a Lamdera backend model. Write Elm scripts that read and
 
 ## How it works
 
-Your `BackendModel` (defined in `src/Types.elm`) works just like in a regular Lamdera app. The only difference is that it is persisted to disk instead of a hosted Lamdera application for use in scripts (**not** full-stack real-time Lamdera apps, just use Lamdera if you need that). It is serialized to `db.bin`. Your scripts live in `script/` and can access the type-safe Lamdera database through two functions:
+Your `BackendModel` (defined in `src/Types.elm`) works just like in a regular Lamdera app. The only difference is that it is persisted to disk instead of a hosted Lamdera application for use in scripts (**not** full-stack real-time Lamdera apps, just use Lamdera if you need that). It is serialized to `db.bin`, and new databases start from `Types.initialBackendModel`. Your scripts live in `script/` and can access the type-safe Lamdera database through two functions:
 
 ```elm
 module LamderaDb exposing (get, update)
@@ -32,7 +32,6 @@ lamdera-db/
 ├── custom-backend-task.ts      # Bridge for saving db.bin
 ├── src/
 │   ├── Types.elm               # Your BackendModel lives here
-│   ├── Backend.elm             # Backend.init provides defaults
 │   ├── Evergreen/
 │   │   ├── V1/
 │   │   │   └── Types.elm       # Snapshot of Types.elm at V1
@@ -43,9 +42,9 @@ lamdera-db/
 │   └── SchemaVersion.elm       # Current schema version number
 ├── script/
 │   ├── Example.elm             # Your scripts go here
-│   └── Migrate.elm             # Migration runner
+│   ├── Migrate.elm             # Migration runner
+│   └── Snapshot.elm            # Schema snapshot helper script
 ├── test.sh                     # E2E migration test
-├── script/Snapshot.elm         # Schema snapshot helper script
 └── db.bin                      # Your data (gitignored)
 ```
 
@@ -56,9 +55,8 @@ lamdera-db/
    ```sh
    npm install
    ```
-3. Define your `BackendModel` in `src/Types.elm`
-4. Set initial values in `Backend.init` (`src/Backend.elm`)
-5. Write scripts in `script/`
+3. Define your `BackendModel` and `initialBackendModel` in `src/Types.elm`
+4. Write scripts in `script/`
 
 ## Running scripts
 

@@ -11,3 +11,10 @@ type alias Todo =
     , title : String
     , completed : Bool
     }
+
+
+initialBackendModel : BackendModel
+initialBackendModel =
+    { todos = []
+    , nextId = 1
+    }

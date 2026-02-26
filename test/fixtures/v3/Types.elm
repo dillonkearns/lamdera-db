@@ -13,3 +13,10 @@ type alias Todo =
     , createdAt : Int
     , priority : Int
     }
+
+
+initialBackendModel : BackendModel
+initialBackendModel =
+    { todos = []
+    , nextId = 1
+    }
