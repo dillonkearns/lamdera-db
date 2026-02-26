@@ -309,6 +309,43 @@ else
     exit 1
 fi
 
+# === Phase 7: Double snapshot rejected (pending migration guard) ===
+# If the user runs Snapshot twice without running Migrate in between,
+# db.bin still has old types. The second Snapshot would snapshot the wrong types.
+# Instead, it should refuse and tell the user to run Migrate first.
+
+# Start with V1 state + data
+cp test/fixtures/v1/Types.elm src/Types.elm
+cp test/fixtures/v1/Backend.elm src/Backend.elm
+cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v1/Example.elm script/Example.elm
+cp test/fixtures/v1/SchemaVersion.elm lib/SchemaVersion.elm
+rm -f script/Migrate.elm script/TestVerifyMigration.elm script/TestVerifyV3.elm
+rm -rf src/Evergreen
+rm -f db.bin
+
+npx elm-pages run script/SeedDb.elm
+echo "✓ Phase 7: Seeded V1 data"
+
+# Change to V2 types and run first Snapshot (succeeds)
+cp "$backup_dir/Types.elm" src/Types.elm
+cp "$backup_dir/Backend.elm" src/Backend.elm
+cp "$backup_dir/SeedDb.elm" script/SeedDb.elm
+cp "$backup_dir/Example.elm" script/Example.elm
+
+npx elm-pages run script/Snapshot.elm
+echo "✓ Phase 7: First snapshot succeeded"
+
+# Run Snapshot AGAIN without running Migrate — should be rejected
+phase7_output=$(npx elm-pages run script/Snapshot.elm 2>&1 || true)
+if echo "$phase7_output" | grep -qi "pending migration"; then
+    echo "✓ Phase 7: Double snapshot correctly rejected with pending migration error"
+else
+    echo "✗ FAIL: Running Snapshot twice without Migrate should be rejected"
+    echo "  Got: $phase7_output"
+    exit 1
+fi
+
 rm -f db.bin
 echo ""
 echo "=== All migration tests passed! ==="

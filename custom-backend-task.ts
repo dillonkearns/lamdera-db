@@ -37,6 +37,23 @@ export async function runSnapshot(): Promise<{
   const N = parseInt(match[1], 10);
   const K = N + 1;
 
+  // 1b. Guard: reject if there's already a pending migration
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      const dbRaw = fs.readFileSync(DB_FILE, "utf-8");
+      const envelope = JSON.parse(dbRaw);
+      if (typeof envelope.v === "number" && envelope.v !== N) {
+        throw new Error(
+          `There is a pending migration: db.bin is at version ${envelope.v} but SchemaVersion is ${N}. ` +
+          `Run the migration first: npx elm-pages run script/Migrate.elm`
+        );
+      }
+    } catch (e: any) {
+      // Re-throw our pending migration error; ignore parse errors (corrupt db.bin)
+      if (e.message?.startsWith("There is a pending migration")) throw e;
+    }
+  }
+
   // 2. Create snapshot: src/Evergreen/V{N}/Types.elm
   // Prefer stored types from db.bin (user may have already changed src/Types.elm)
   const snapshotDir = path.join(PROJECT_ROOT, "src", "Evergreen", `V${N}`);

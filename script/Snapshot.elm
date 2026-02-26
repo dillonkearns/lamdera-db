@@ -24,6 +24,11 @@ run =
                             ++ String.fromInt result.newVersion
                             ++ "\nFiles: "
                             ++ String.join ", " result.files
+                            ++ "\n\nNext steps:"
+                            ++ "\n  1. Edit src/Evergreen/Migrate/V"
+                            ++ String.fromInt result.newVersion
+                            ++ ".elm to implement the migration"
+                            ++ "\n  2. Run: npx elm-pages run script/Migrate.elm"
                         )
                 )
         )
