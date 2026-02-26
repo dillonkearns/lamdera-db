@@ -3,6 +3,7 @@ module LamderaDb exposing (get, update)
 import Backend
 import BackendTask exposing (BackendTask)
 import BackendTask.Custom
+import BackendTask.File
 import Base64
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
@@ -15,9 +16,9 @@ import Types exposing (BackendModel)
 
 get : BackendTask FatalError BackendModel
 get =
-    load
+    BackendTask.map2 Tuple.pair load readTypesElm
         |> BackendTask.andThen
-            (\maybeJson ->
+            (\( maybeJson, currentTypes ) ->
                 case maybeJson of
                     Nothing ->
                         BackendTask.succeed (Tuple.first Backend.init)
@@ -47,18 +48,38 @@ get =
                                         )
 
                                 else
-                                    case envelope.d |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
-                                        Just model ->
-                                            BackendTask.succeed model
+                                    case envelope.t of
+                                        Just storedTypes ->
+                                            if storedTypes /= currentTypes then
+                                                BackendTask.fail
+                                                    (FatalError.build
+                                                        { title = "Types.elm has changed"
+                                                        , body = "src/Types.elm has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                                        }
+                                                    )
+
+                                            else
+                                                decodeModel envelope.d
 
                                         Nothing ->
-                                            BackendTask.fail
-                                                (FatalError.build
-                                                    { title = "db.bin decode failed"
-                                                    , body = "Failed to decode db.bin data. The Wire3 codec could not decode the stored bytes."
-                                                    }
-                                                )
+                                            -- Old db.bin without types fingerprint; skip check
+                                            decodeModel envelope.d
             )
+
+
+decodeModel : String -> BackendTask FatalError BackendModel
+decodeModel b64 =
+    case b64 |> Base64.toBytes |> Maybe.andThen (Wire.bytesDecode Types.w3_decode_BackendModel) of
+        Just model ->
+            BackendTask.succeed model
+
+        Nothing ->
+            BackendTask.fail
+                (FatalError.build
+                    { title = "db.bin decode failed"
+                    , body = "Failed to decode db.bin data. The Wire3 codec could not decode the stored bytes."
+                    }
+                )
 
 
 update : (BackendModel -> BackendModel) -> BackendTask FatalError ()
@@ -77,11 +98,18 @@ update fn =
             )
 
 
-envelopeDecoder : Decode.Decoder { v : Int, d : String }
+envelopeDecoder : Decode.Decoder { v : Int, t : Maybe String, d : String }
 envelopeDecoder =
-    Decode.map2 (\v d -> { v = v, d = d })
+    Decode.map3 (\v t d -> { v = v, t = t, d = d })
         (Decode.field "v" Decode.int)
+        (Decode.maybe (Decode.field "t" Decode.string))
         (Decode.field "d" Decode.string)
+
+
+readTypesElm : BackendTask FatalError String
+readTypesElm =
+    BackendTask.File.rawFile "src/Types.elm"
+        |> BackendTask.allowFatal
 
 
 load : BackendTask FatalError (Maybe String)

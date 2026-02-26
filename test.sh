@@ -53,6 +53,27 @@ echo "✓ Phase 1: Seeded V1 data"
 npx elm-pages run script/MigrationTest.elm
 echo "✓ Phase 1: V1 data reads OK"
 
+# === Phase 1b: Modify V1 types WITHOUT bumping version (simulate user editing Types.elm) ===
+# This reproduces: user adds a field to Types.elm, updates scripts to compile, but
+# doesn't bump SchemaVersion. db.bin has old data. LamderaDb.get should reject it.
+cp test/fixtures/v1-modified/Types.elm src/Types.elm
+cp test/fixtures/v1-modified/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v1-modified/Example.elm script/Example.elm
+# SchemaVersion stays at 1 — no version bump!
+
+phase1b_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase1b_output" | grep -qi "BackendModel loaded"; then
+    echo "✗ FAIL: Should have rejected db.bin after Types.elm changed without version bump"
+    echo "  Got: $phase1b_output"
+    exit 1
+fi
+echo "✓ Phase 1b: Schema change without version bump correctly rejected"
+
+# Restore V1 files for clean state before Phase 2
+cp test/fixtures/v1/Types.elm src/Types.elm
+cp test/fixtures/v1/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v1/Example.elm script/Example.elm
+
 # === Phase 2: Switch to V2 schema (simulate user changing types) ===
 # Restore V2 source files but keep db.bin (which has V1 data)
 restore_v2
@@ -75,6 +96,33 @@ echo "✓ Phase 3: Migration completed"
 # === Phase 4: Verify migrated data has correct values ===
 npx elm-pages run script/TestVerifyMigration.elm
 echo "✓ Phase 4: Migrated data verified — all values correct"
+
+# === Phase 4b: Modify V2 types WITHOUT bumping version (same bug, V2 variant) ===
+# db.bin has valid V2 data from Phase 3. Add a field to Types.elm without bumping version.
+# This is exactly the scenario the user reported: V2 + added field, SchemaVersion stays 2.
+cp test/fixtures/v2-modified/Types.elm src/Types.elm
+cp test/fixtures/v2-modified/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v2-modified/Example.elm script/Example.elm
+# SchemaVersion stays at 2 — no version bump!
+
+# Re-seed V2 data first so db.bin definitely has V2 data
+restore_v2
+npx elm-pages run script/SeedDb.elm
+# Now swap to v2-modified
+cp test/fixtures/v2-modified/Types.elm src/Types.elm
+cp test/fixtures/v2-modified/SeedDb.elm script/SeedDb.elm
+cp test/fixtures/v2-modified/Example.elm script/Example.elm
+# Remove files that won't compile with v2-modified types
+rm -f script/Migrate.elm script/TestVerifyMigration.elm
+rm -rf src/Evergreen
+
+phase4b_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
+if echo "$phase4b_output" | grep -qi "BackendModel loaded"; then
+    echo "✗ FAIL: Should have rejected db.bin after V2 Types.elm changed without version bump"
+    echo "  Got: $phase4b_output"
+    exit 1
+fi
+echo "✓ Phase 4b: V2 schema change without version bump correctly rejected"
 
 rm -f db.bin
 echo ""

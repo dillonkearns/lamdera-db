@@ -2,6 +2,7 @@ module LamderaDb.Migration exposing (readVersioned, writeVersioned)
 
 import BackendTask exposing (BackendTask)
 import BackendTask.Custom
+import BackendTask.File
 import Base64
 import Bytes exposing (Bytes)
 import FatalError exposing (FatalError)
@@ -50,26 +51,31 @@ readVersioned =
 
 writeVersioned : Int -> Bytes -> BackendTask FatalError ()
 writeVersioned version bytes =
-    case Base64.fromBytes bytes of
-        Just b64 ->
-            let
-                json =
-                    Encode.encode 0
-                        (Encode.object
-                            [ ( "v", Encode.int version )
-                            , ( "d", Encode.string b64 )
-                            ]
-                        )
-            in
-            save json
+    readTypesElm
+        |> BackendTask.andThen
+            (\typesContent ->
+                case Base64.fromBytes bytes of
+                    Just b64 ->
+                        let
+                            json =
+                                Encode.encode 0
+                                    (Encode.object
+                                        [ ( "v", Encode.int version )
+                                        , ( "t", Encode.string typesContent )
+                                        , ( "d", Encode.string b64 )
+                                        ]
+                                    )
+                        in
+                        save json
 
-        Nothing ->
-            BackendTask.fail
-                (FatalError.build
-                    { title = "db.bin encode failed"
-                    , body = "Failed to Base64-encode the model bytes."
-                    }
-                )
+                    Nothing ->
+                        BackendTask.fail
+                            (FatalError.build
+                                { title = "db.bin encode failed"
+                                , body = "Failed to Base64-encode the model bytes."
+                                }
+                            )
+            )
 
 
 envelopeDecoder : Decode.Decoder { v : Int, d : String }
@@ -77,6 +83,12 @@ envelopeDecoder =
     Decode.map2 (\v d -> { v = v, d = d })
         (Decode.field "v" Decode.int)
         (Decode.field "d" Decode.string)
+
+
+readTypesElm : BackendTask FatalError String
+readTypesElm =
+    BackendTask.File.rawFile "src/Types.elm"
+        |> BackendTask.allowFatal
 
 
 load : BackendTask FatalError (Maybe String)
