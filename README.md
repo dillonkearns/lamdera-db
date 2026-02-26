@@ -45,7 +45,7 @@ lamdera-db/
 │   ├── Example.elm             # Your scripts go here
 │   └── Migrate.elm             # Migration runner
 ├── test.sh                     # E2E migration test
-├── snapshot.sh                 # Schema snapshot helper
+├── script/Snapshot.elm         # Schema snapshot helper script
 └── db.bin                      # Your data (gitignored)
 ```
 

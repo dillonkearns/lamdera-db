@@ -167,7 +167,7 @@ rm -f db.bin
 npx elm-pages run script/SeedDb.elm
 
 # Copy V2 types with a non-BackendModel type change only
-cp test/fixtures/v2-frontend-change/Types.elm src/Types.elm
+cp test/fixtures/v2-non-backend-change/Types.elm src/Types.elm
 
 phase4d_output=$(npx elm-pages run script/MigrationTest.elm 2>&1 || true)
 if echo "$phase4d_output" | grep -qi "BackendModel loaded"; then
