@@ -22,6 +22,28 @@ export async function saveDbState(json: string): Promise<null> {
   return null;
 }
 
+export async function backupDbBin(): Promise<null> {
+  if (fs.existsSync(DB_FILE)) {
+    fs.copyFileSync(DB_FILE, DB_FILE + ".backup");
+  }
+  return null;
+}
+
+export async function runMigrationChain(): Promise<null> {
+  const migrateChainPath = path.join(PROJECT_ROOT, ".lamdera-db", "MigrateChain.elm");
+  if (!fs.existsSync(migrateChainPath)) {
+    throw new Error(
+      "No migration chain found at .lamdera-db/MigrateChain.elm. " +
+      "This usually means no snapshot has been run yet."
+    );
+  }
+  execSync('npx elm-pages run .lamdera-db/MigrateChain.elm', {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+  });
+  return null;
+}
+
 export async function runSnapshot(): Promise<{
   previousVersion: number;
   newVersion: number;
@@ -30,10 +52,10 @@ export async function runSnapshot(): Promise<{
   const files: string[] = [];
 
   // 1. Read current version from SchemaVersion.elm
-  const schemaVersionPath = path.join(PROJECT_ROOT, "lib", "SchemaVersion.elm");
+  const schemaVersionPath = path.join(PROJECT_ROOT, ".lamdera-db", "SchemaVersion.elm");
   const schemaContent = fs.readFileSync(schemaVersionPath, "utf-8");
   const match = schemaContent.match(/current\s*=\s*(\d+)/);
-  if (!match) throw new Error("Could not parse version from lib/SchemaVersion.elm");
+  if (!match) throw new Error("Could not parse version from .lamdera-db/SchemaVersion.elm");
   const N = parseInt(match[1], 10);
   const K = N + 1;
 
@@ -45,7 +67,7 @@ export async function runSnapshot(): Promise<{
       if (typeof envelope.v === "number" && envelope.v !== N) {
         throw new Error(
           `There is a pending migration: db.bin is at version ${envelope.v} but SchemaVersion is ${N}. ` +
-          `Run the migration first: npx elm-pages run script/Migrate.elm`
+          `Run the migration first: npm run migrate`
         );
       }
     } catch (e: any) {
@@ -103,7 +125,7 @@ export async function runSnapshot(): Promise<{
     files.push(`src/Evergreen/Migrate/V${N}.elm`);
   }
 
-  // 4. Create migration stub V{K}
+  // 4. Create migration stub V{K} with compile-error sentinel
   fs.mkdirSync(migrateDir, { recursive: true });
   const stubPath = path.join(migrateDir, `V${K}.elm`);
   const stubContent = [
@@ -115,18 +137,17 @@ export async function runSnapshot(): Promise<{
     "",
     `backendModel : Evergreen.V${N}.Types.BackendModel -> Types.BackendModel`,
     "backendModel old =",
-    "    -- TODO: implement migration",
-    `    Debug.todo "Implement V${N} -> V${K} migration"`,
+    `    todo_implementMigration_V${N}_to_V${K}`,
     "",
   ].join("\n");
   fs.writeFileSync(stubPath, stubContent, "utf-8");
   files.push(`src/Evergreen/Migrate/V${K}.elm`);
 
-  // 5. Generate script/Migrate.elm
-  const migrateElm = generateMigrateElm(N);
-  const migrateElmPath = path.join(PROJECT_ROOT, "script", "Migrate.elm");
-  fs.writeFileSync(migrateElmPath, migrateElm, "utf-8");
-  files.push("script/Migrate.elm");
+  // 5. Generate .lamdera-db/MigrateChain.elm
+  const migrateChainElm = generateMigrateChainElm(N);
+  const migrateChainPath = path.join(PROJECT_ROOT, ".lamdera-db", "MigrateChain.elm");
+  fs.writeFileSync(migrateChainPath, migrateChainElm, "utf-8");
+  files.push(".lamdera-db/MigrateChain.elm");
 
   // 6. Bump SchemaVersion.elm to K
   const newSchemaContent = schemaContent.replace(
@@ -134,7 +155,7 @@ export async function runSnapshot(): Promise<{
     `current = ${K}`
   );
   fs.writeFileSync(schemaVersionPath, newSchemaContent, "utf-8");
-  files.push("lib/SchemaVersion.elm");
+  files.push(".lamdera-db/SchemaVersion.elm");
 
   return { previousVersion: N, newVersion: K, files };
 }
@@ -143,8 +164,8 @@ export async function compareBackendModelShape(args: {
   storedTypes: string;
   currentTypes: string;
 }): Promise<{ result: "Same" | "Different" | "Error"; message?: string }> {
-  const tmpTypes = path.join(PROJECT_ROOT, "script", "LamderaDbDeepCheckTmpTypes.elm");
-  const tmpWitness = path.join(PROJECT_ROOT, "script", "LamderaDbDeepCheckTmpWitness.elm");
+  const tmpTypes = path.join(PROJECT_ROOT, ".lamdera-db", "LamderaDbDeepCheckTmpTypes.elm");
+  const tmpWitness = path.join(PROJECT_ROOT, ".lamdera-db", "LamderaDbDeepCheckTmpWitness.elm");
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lamdera-deep-check-"));
 
   const witnessContent = [
@@ -174,7 +195,7 @@ export async function compareBackendModelShape(args: {
     const storedJs = path.join(tmpDir, "stored.js");
     try {
       execSync(
-        `lamdera make script/LamderaDbDeepCheckTmpWitness.elm --output=${storedJs}`,
+        `lamdera make .lamdera-db/LamderaDbDeepCheckTmpWitness.elm --output=${storedJs}`,
         { cwd: PROJECT_ROOT, stdio: "pipe" }
       );
     } catch (e: any) {
@@ -199,7 +220,7 @@ export async function compareBackendModelShape(args: {
     const currentJs = path.join(tmpDir, "current.js");
     try {
       execSync(
-        `lamdera make script/LamderaDbDeepCheckTmpWitness.elm --output=${currentJs}`,
+        `lamdera make .lamdera-db/LamderaDbDeepCheckTmpWitness.elm --output=${currentJs}`,
         { cwd: PROJECT_ROOT, stdio: "pipe" }
       );
     } catch (e: any) {
@@ -239,7 +260,7 @@ export async function compareBackendModelShape(args: {
   }
 }
 
-function generateMigrateElm(N: number): string {
+function generateMigrateChainElm(N: number): string {
   // N = version before bump. New version K = N + 1.
   // Old versions to handle in case branches: 1..N
   // Migration modules: V2..VK
@@ -249,6 +270,7 @@ function generateMigrateElm(N: number): string {
   // --- Imports ---
   const imports: string[] = [
     "import BackendTask exposing (BackendTask)",
+    "import BackendTask.Custom",
   ];
   for (let i = 2; i <= K; i++) {
     imports.push(`import Evergreen.Migrate.V${i} as MigrateV${i}`);
@@ -258,6 +280,8 @@ function generateMigrateElm(N: number): string {
   }
   imports.push(
     "import FatalError exposing (FatalError)",
+    "import Json.Decode as Decode",
+    "import Json.Encode as Encode",
     "import LamderaDb.Migration",
     "import Lamdera.Wire3 as Wire",
     "import Pages.Script as Script exposing (Script)",
@@ -270,18 +294,18 @@ function generateMigrateElm(N: number): string {
   for (let i = 1; i <= N; i++) {
     caseBranches.push(
       [
-        `                        ${i} ->`,
-        `                            case Wire.bytesDecode Evergreen.V${i}.Types.w3_decode_BackendModel bytes of`,
-        `                                Just v${i}Model ->`,
-        `                                    migrateFromV${i} v${i}Model`,
+        `                    ${i} ->`,
+        `                        case Wire.bytesDecode Evergreen.V${i}.Types.w3_decode_BackendModel bytes of`,
+        `                            Just v${i}Model ->`,
+        `                                migrateFromV${i} v${i}Model`,
         "",
-        "                                Nothing ->",
-        "                                    BackendTask.fail",
-        "                                        (FatalError.build",
-        `                                            { title = "V${i} decode failed"`,
-        `                                            , body = "Could not decode db.bin as V${i} BackendModel."`,
-        "                                            }",
-        "                                        )",
+        "                            Nothing ->",
+        "                                BackendTask.fail",
+        "                                    (FatalError.build",
+        `                                        { title = "V${i} decode failed"`,
+        `                                        , body = "Could not decode db.bin as V${i} BackendModel."`,
+        "                                        }",
+        "                                    )",
       ].join("\n")
     );
   }
@@ -317,7 +341,7 @@ function generateMigrateElm(N: number): string {
   }
 
   return [
-    "module Migrate exposing (run)",
+    "module MigrateChain exposing (run)",
     "",
     imports.join("\n"),
     "",
@@ -325,25 +349,40 @@ function generateMigrateElm(N: number): string {
     "run : Script",
     "run =",
     "    Script.withoutCliOptions",
-    "        (LamderaDb.Migration.readVersioned",
-    "            |> BackendTask.andThen",
-    "                (\\{ version, bytes } ->",
-    "                    case version of",
+    "        (backupDbBin",
+    "            |> BackendTask.andThen (\\_ -> runMigration)",
+    "        )",
+    "",
+    "",
+    "backupDbBin : BackendTask FatalError ()",
+    "backupDbBin =",
+    '    BackendTask.Custom.run "backupDbBin"',
+    "        Encode.null",
+    "        (Decode.succeed ())",
+    "        |> BackendTask.allowFatal",
+    "        |> BackendTask.quiet",
+    "",
+    "",
+    "runMigration : BackendTask FatalError ()",
+    "runMigration =",
+    "    LamderaDb.Migration.readVersioned",
+    "        |> BackendTask.andThen",
+    "            (\\{ version, bytes } ->",
+    "                case version of",
     caseBranches.join("\n\n"),
     "",
-    "                        _ ->",
-    '                            if version == SchemaVersion.current then',
-    '                                Script.log ("db.bin is already at version " ++ String.fromInt version ++ ". No migration needed.")',
+    "                    _ ->",
+    '                        if version == SchemaVersion.current then',
+    '                            Script.log ("db.bin is already at version " ++ String.fromInt version ++ ". No migration needed.")',
     "",
-    "                            else",
-    "                                BackendTask.fail",
-    "                                    (FatalError.build",
-    '                                        { title = "Unknown version"',
-    '                                        , body = "db.bin is at version " ++ String.fromInt version ++ " but no migration path is defined."',
-    "                                        }",
-    "                                    )",
-    "                )",
-    "        )",
+    "                        else",
+    "                            BackendTask.fail",
+    "                                (FatalError.build",
+    '                                    { title = "Unknown version"',
+    '                                    , body = "db.bin is at version " ++ String.fromInt version ++ " but no migration path is defined."',
+    "                                    }",
+    "                                )",
+    "            )",
     ...chainFunctions,
     "",
     "",

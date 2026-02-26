@@ -57,7 +57,7 @@ get =
                                                     ++ String.fromInt envelope.v
                                                     ++ " but schema is version "
                                                     ++ String.fromInt SchemaVersion.current
-                                                    ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                                    ++ ". Run: npm run migrate"
                                             }
                                         )
 
@@ -117,7 +117,7 @@ checkMigration =
                                                     ++ String.fromInt envelope.v
                                                     ++ " but schema is version "
                                                     ++ String.fromInt SchemaVersion.current
-                                                    ++ ". Run: npx elm-pages run script/Migrate.elm"
+                                                    ++ ". Run: npm run migrate"
                                             }
                                         )
 
@@ -148,7 +148,7 @@ verifyTypes currentTypes storedTypes onSame =
                             BackendTask.fail
                                 (FatalError.build
                                     { title = "Types.elm has changed"
-                                    , body = "BackendModel has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npx elm-pages run script/Snapshot.elm"
+                                    , body = "BackendModel has changed since db.bin was last written, but SchemaVersion is still " ++ String.fromInt SchemaVersion.current ++ ". Run: npm run migrate"
                                     }
                                 )
 

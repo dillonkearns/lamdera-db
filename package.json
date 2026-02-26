@@ -4,7 +4,9 @@
   "scripts": {
     "test": "bash test.sh",
     "script": "elm-pages run",
-    "schema:snapshot": "elm-pages run script/Snapshot.elm"
+    "migrate": "elm-pages run .lamdera-db/Migrate.elm",
+    "skill:install": "bash script/install-codex-skill.sh evergreen-migration-assist",
+    "skill:validate": "bash script/validate-codex-skill.sh evergreen-migration-assist"
   },
   "devDependencies": {
     "elm-pages": "^3.1.5",
