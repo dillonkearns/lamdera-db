@@ -231,6 +231,9 @@ runAllPhases backupDir =
         |> BackendTask.andThen (\_ -> phase4b backupDir)
         |> BackendTask.andThen (\_ -> phase4c backupDir)
         |> BackendTask.andThen (\_ -> phase4d backupDir)
+        |> BackendTask.andThen (\_ -> phase4e backupDir)
+        |> BackendTask.andThen (\_ -> phase4f backupDir)
+        |> BackendTask.andThen (\_ -> phase4g backupDir)
         |> BackendTask.andThen (\_ -> phase5 backupDir)
         |> BackendTask.andThen (\_ -> phase5b backupDir)
         |> BackendTask.andThen (\_ -> phase6 backupDir)
@@ -366,6 +369,79 @@ phase4d backupDir =
                 assertContains "Non-BackendModel Types.elm change should have been allowed" "BackendModel loaded" output
             )
         |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4d: Non-BackendModel Types.elm change correctly allowed")
+        |> BackendTask.andThen (\_ -> restoreV2 backupDir)
+
+
+
+-- Phase 4e: Declaration reorder allowed
+
+
+phase4e : String -> BackendTask FatalError ()
+phase4e backupDir =
+    restoreV2 backupDir
+        |> BackendTask.andThen (\_ -> rmFile "db.bin")
+        |> BackendTask.andThen (\_ -> elmPagesRun "script/SeedDb.elm")
+        |> BackendTask.andThen (\_ -> cp "test/fixtures/v2-declaration-reorder/Types.elm" "src/Types.elm")
+        |> BackendTask.andThen (\_ -> elmPagesRunCapture "script/MigrationTest.elm")
+        |> BackendTask.andThen
+            (\{ output } ->
+                assertContains "Declaration-reorder Types.elm change should have been allowed" "BackendModel loaded" output
+            )
+        |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4e: Declaration reorder correctly allowed")
+        |> BackendTask.andThen (\_ -> restoreV2 backupDir)
+
+
+
+-- Phase 4f: Legacy envelope without `t` field
+
+
+phase4f : String -> BackendTask FatalError ()
+phase4f backupDir =
+    restoreV2 backupDir
+        |> BackendTask.andThen (\_ -> rmFile "db.bin")
+        |> BackendTask.andThen (\_ -> elmPagesRun "script/SeedDb.elm")
+        |> BackendTask.andThen
+            (\_ ->
+                Script.exec "node"
+                    [ "-e"
+                    , "const fs = require('fs'); const j = JSON.parse(fs.readFileSync('db.bin','utf8')); delete j.t; fs.writeFileSync('db.bin', JSON.stringify(j));"
+                    ]
+            )
+        |> BackendTask.andThen (\_ -> elmPagesRunCapture "script/MigrationTest.elm")
+        |> BackendTask.andThen
+            (\{ output } ->
+                assertContains "Legacy envelope without t field should still load" "BackendModel loaded" output
+            )
+        |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4f: Legacy envelope without t field correctly handled")
+        |> BackendTask.andThen (\_ -> restoreV2 backupDir)
+
+
+
+-- Phase 4g: Deep comparator failure → fail closed
+
+
+phase4g : String -> BackendTask FatalError ()
+phase4g backupDir =
+    restoreV2 backupDir
+        |> BackendTask.andThen (\_ -> rmFile "db.bin")
+        |> BackendTask.andThen (\_ -> elmPagesRun "script/SeedDb.elm")
+        |> BackendTask.andThen
+            (\_ ->
+                Script.exec "node"
+                    [ "-e"
+                    , "const fs = require('fs'); const j = JSON.parse(fs.readFileSync('db.bin','utf8')); j.t = 'invalid_elm_source_that_cannot_compile'; fs.writeFileSync('db.bin', JSON.stringify(j));"
+                    ]
+            )
+        |> BackendTask.andThen (\_ -> elmPagesRunCapture "script/MigrationTest.elm")
+        |> BackendTask.andThen
+            (\{ output } ->
+                assertContains "Deep check failure should report schema compatibility error" "could not verify schema compatibility" output
+                    |> BackendTask.andThen
+                        (\_ ->
+                            assertNotContains "Deep check failure should not load model" "BackendModel loaded" output
+                        )
+            )
+        |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4g: Deep comparator failure correctly fails closed")
         |> BackendTask.andThen (\_ -> restoreV2 backupDir)
 
 
