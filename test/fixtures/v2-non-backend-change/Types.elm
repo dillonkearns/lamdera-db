@@ -14,6 +14,11 @@ type alias Todo =
     }
 
 
+type alias CliUiPrefs =
+    { darkMode : Bool
+    }
+
+
 initialBackendModel : BackendModel
 initialBackendModel =
     { todos = []

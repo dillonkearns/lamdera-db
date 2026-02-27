@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evergreen Migration Assist"
+  short_description: "Draft and validate safe Evergreen migrations"
+  default_prompt: "Use $evergreen-migration-assist to run preflight (auto-snapshot if needed), propose migration mapping options, confirm my choice, then implement and run harness + guardrail checks."

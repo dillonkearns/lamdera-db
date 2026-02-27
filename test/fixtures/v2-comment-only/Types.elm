@@ -1,5 +1,6 @@
 module Types exposing (..)
 
+-- BackendModel stores the application state
 type alias BackendModel =
     { todos : List Todo
     , nextId : Int

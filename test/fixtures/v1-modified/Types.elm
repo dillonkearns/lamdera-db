@@ -10,7 +10,7 @@ type alias Todo =
     { id : Int
     , title : String
     , completed : Bool
-    , createdAt : Int
+    , updatedAt : Int
     }
 
 

@@ -11,6 +11,7 @@ type alias Todo =
     , title : String
     , completed : Bool
     , createdAt : Int
+    , updatedAt : Int
     }
 
 

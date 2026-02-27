@@ -71,8 +71,6 @@ handleInput key todos =
                                             ++ [ { id = m.nextId
                                                  , title = title
                                                  , completed = False
-                                                 , createdAt = 0
-                                                 , description = ""
                                                  }
                                                ]
                                     , nextId = m.nextId + 1

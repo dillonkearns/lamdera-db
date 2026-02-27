@@ -3,12 +3,14 @@
     "source-directories": [
         "src",
         "lib",
-        "script"
+        "script",
+        ".lamdera-db"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
             "danfishgold/base64-bytes": "1.1.0",
+            "dillonkearns/elm-cli-options-parser": "4.0.0",
             "dillonkearns/elm-pages": "11.0.0",
             "elm/browser": "1.0.2",
             "elm/bytes": "1.0.8",
@@ -24,7 +26,6 @@
             "avh4/elm-color": "1.0.0",
             "danyx23/elm-mimetype": "4.0.1",
             "dillonkearns/elm-bcp47-language-tag": "2.0.0",
-            "dillonkearns/elm-cli-options-parser": "4.0.0",
             "dillonkearns/elm-date-or-date-time": "2.0.0",
             "dillonkearns/elm-form": "3.0.1",
             "elm/file": "1.0.5",

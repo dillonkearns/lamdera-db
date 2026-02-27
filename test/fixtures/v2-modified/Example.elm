@@ -72,7 +72,7 @@ handleInput key todos =
                                                  , title = title
                                                  , completed = False
                                                  , createdAt = 0
-                                                 , description = ""
+                                                 , updatedAt = 0
                                                  }
                                                ]
                                     , nextId = m.nextId + 1

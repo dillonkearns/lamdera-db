@@ -1,5 +1,7 @@
 elm-stuff
 db.bin
+db.bin.backup
 localdev.js
 node_modules
 .elm-pages
+.lamdera-db/LamderaDbDeepCheckTmp*

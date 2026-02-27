@@ -1,10 +1,5 @@
 module Types exposing (..)
 
-type alias BackendModel =
-    { todos : List Todo
-    , nextId : Int
-    }
-
 
 type alias Todo =
     { id : Int
@@ -18,4 +13,10 @@ initialBackendModel : BackendModel
 initialBackendModel =
     { todos = []
     , nextId = 1
+    }
+
+
+type alias BackendModel =
+    { todos : List Todo
+    , nextId : Int
     }
