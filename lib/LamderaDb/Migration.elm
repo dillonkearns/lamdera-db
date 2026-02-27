@@ -1,13 +1,13 @@
 module LamderaDb.Migration exposing (readVersioned, writeVersioned)
 
 import BackendTask exposing (BackendTask)
-import BackendTask.Custom
 import BackendTask.File
 import Base64
 import Bytes exposing (Bytes)
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Pages.Script as Script
 
 
 readVersioned : BackendTask FatalError { version : Int, bytes : Bytes }
@@ -93,17 +93,15 @@ readTypesElm =
 
 load : BackendTask FatalError (Maybe String)
 load =
-    BackendTask.Custom.run "loadDbState"
-        Encode.null
-        (Decode.nullable Decode.string)
+    BackendTask.File.rawFile "db.bin"
+        |> BackendTask.map Just
+        |> BackendTask.onError (\_ -> BackendTask.succeed Nothing)
         |> BackendTask.allowFatal
         |> BackendTask.quiet
 
 
 save : String -> BackendTask FatalError ()
 save json =
-    BackendTask.Custom.run "saveDbState"
-        (Encode.string json)
-        (Decode.succeed ())
+    Script.writeFile { path = "db.bin", body = json }
         |> BackendTask.allowFatal
         |> BackendTask.quiet

@@ -1,23 +1,17 @@
 module LamderaDb exposing (get, script, update)
 
 import BackendTask exposing (BackendTask)
-import BackendTask.Custom
 import BackendTask.File
 import Base64
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import LamderaDb.DeepCompare exposing (DeepCompareResult(..))
 import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
 import Pages.Script as Script exposing (Script)
 import SchemaVersion
 import Types exposing (BackendModel, initialBackendModel)
-
-
-type DeepCompareResult
-    = Same
-    | Different
-    | DeepCheckError String
 
 
 script : BackendTask FatalError () -> Script
@@ -169,40 +163,41 @@ Called after a deep compare confirms the types are structurally identical.
 -}
 updateTypesFingerprint : String -> BackendTask FatalError ()
 updateTypesFingerprint currentTypes =
-    BackendTask.Custom.run "updateTypesFingerprint"
-        (Encode.string currentTypes)
-        (Decode.succeed ())
-        |> BackendTask.allowFatal
-        |> BackendTask.quiet
+    load
+        |> BackendTask.andThen
+            (\maybeJson ->
+                case maybeJson of
+                    Nothing ->
+                        BackendTask.succeed ()
+
+                    Just json ->
+                        case Decode.decodeString envelopeDecoder json of
+                            Err _ ->
+                                BackendTask.succeed ()
+
+                            Ok envelope ->
+                                let
+                                    updatedJson =
+                                        Encode.encode 0
+                                            (Encode.object
+                                                [ ( "v", Encode.int envelope.v )
+                                                , ( "t", Encode.string currentTypes )
+                                                , ( "d", Encode.string envelope.d )
+                                                ]
+                                            )
+                                in
+                                Script.writeFile { path = "db.bin", body = updatedJson }
+                                    |> BackendTask.allowFatal
+                                    |> BackendTask.quiet
+            )
 
 
 deepCompare : String -> String -> BackendTask FatalError DeepCompareResult
 deepCompare storedTypes currentTypes =
-    BackendTask.Custom.run "compareBackendModelShape"
-        (Encode.object
-            [ ( "storedTypes", Encode.string storedTypes )
-            , ( "currentTypes", Encode.string currentTypes )
-            ]
-        )
-        (Decode.field "result" Decode.string
-            |> Decode.andThen
-                (\result ->
-                    case result of
-                        "Same" ->
-                            Decode.succeed Same
-
-                        "Different" ->
-                            Decode.succeed Different
-
-                        "Error" ->
-                            Decode.field "message" Decode.string
-                                |> Decode.map DeepCheckError
-
-                        _ ->
-                            Decode.fail ("Unknown deep compare result: " ++ result)
-                )
-        )
-        |> BackendTask.allowFatal
+    LamderaDb.DeepCompare.compareBackendModelShape
+        { storedTypes = storedTypes
+        , currentTypes = currentTypes
+        }
 
 
 decodeModel : String -> BackendTask FatalError BackendModel
@@ -236,8 +231,8 @@ readTypesElm =
 
 load : BackendTask FatalError (Maybe String)
 load =
-    BackendTask.Custom.run "loadDbState"
-        Encode.null
-        (Decode.nullable Decode.string)
+    BackendTask.File.rawFile "db.bin"
+        |> BackendTask.map Just
+        |> BackendTask.onError (\_ -> BackendTask.succeed Nothing)
         |> BackendTask.allowFatal
         |> BackendTask.quiet

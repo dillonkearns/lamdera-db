@@ -1,12 +1,10 @@
 module MigrateChain exposing (run)
 
 import BackendTask exposing (BackendTask)
-import BackendTask.Custom
 import Evergreen.Migrate.V2 as MigrateV2
 import Evergreen.V1.Types
 import FatalError exposing (FatalError)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import LamderaDb.FileHelpers
 import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
 import Pages.Script as Script exposing (Script)
@@ -24,10 +22,15 @@ run =
 
 backupDbBin : BackendTask FatalError ()
 backupDbBin =
-    BackendTask.Custom.run "backupDbBin"
-        Encode.null
-        (Decode.succeed ())
-        |> BackendTask.allowFatal
+    LamderaDb.FileHelpers.fileExists "db.bin"
+        |> BackendTask.andThen
+            (\exists ->
+                if exists then
+                    LamderaDb.FileHelpers.copyFile { from = "db.bin", to = "db.bin.backup" }
+
+                else
+                    BackendTask.succeed ()
+            )
         |> BackendTask.quiet
 
 

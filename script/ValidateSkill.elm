@@ -1,9 +1,11 @@
 module ValidateSkill exposing (run)
 
 import BackendTask exposing (BackendTask)
-import BackendTask.Env
 import BackendTask.File
 import Char
+import Cli.Option
+import Cli.OptionsParser
+import Cli.Program
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Pages.Script as Script exposing (Script)
@@ -18,10 +20,16 @@ type alias SkillFrontmatter =
 
 run : Script
 run =
-    Script.withoutCliOptions
-        (BackendTask.Env.get "SKILL_NAME"
-            |> BackendTask.map (Maybe.withDefault "evergreen-migration-assist")
-            |> BackendTask.andThen validateSkill
+    Script.withCliOptions
+        (Cli.Program.config
+            |> Cli.Program.add
+                (Cli.OptionsParser.build identity
+                    |> Cli.OptionsParser.withOptionalPositionalArg
+                        (Cli.Option.optionalPositionalArg "skill-name")
+                )
+        )
+        (\maybeName ->
+            validateSkill (Maybe.withDefault "evergreen-migration-assist" maybeName)
         )
 
 

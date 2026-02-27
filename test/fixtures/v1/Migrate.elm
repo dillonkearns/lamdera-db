@@ -1,11 +1,11 @@
 module Migrate exposing (run)
 
 import BackendTask exposing (BackendTask)
-import BackendTask.Custom
 import BackendTask.File
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
-import Json.Encode as Encode
+import LamderaDb.DeepCompare exposing (DeepCompareResult(..))
+import LamderaDb.Snapshot
 import Pages.Script as Script exposing (Script)
 import SchemaVersion
 
@@ -118,67 +118,31 @@ checkTypesChanged maybeStoredTypes =
 -- Auto-snapshot helpers
 
 
-type DeepCompareResult
-    = Same
-    | Different
-    | DeepCheckError String
-
-
 loadDbState : BackendTask FatalError (Maybe String)
 loadDbState =
-    BackendTask.Custom.run "loadDbState"
-        Encode.null
-        (Decode.nullable Decode.string)
+    BackendTask.File.rawFile "db.bin"
+        |> BackendTask.map Just
+        |> BackendTask.onError (\_ -> BackendTask.succeed Nothing)
         |> BackendTask.allowFatal
         |> BackendTask.quiet
 
 
 callRunSnapshot : BackendTask FatalError { previousVersion : Int, newVersion : Int }
 callRunSnapshot =
-    BackendTask.Custom.run "runSnapshot"
-        Encode.null
-        (Decode.map2 (\pv nv -> { previousVersion = pv, newVersion = nv })
-            (Decode.field "previousVersion" Decode.int)
-            (Decode.field "newVersion" Decode.int)
-        )
-        |> BackendTask.allowFatal
+    LamderaDb.Snapshot.runSnapshot
 
 
 runMigrationChain : BackendTask FatalError ()
 runMigrationChain =
-    BackendTask.Custom.run "runMigrationChain"
-        Encode.null
-        (Decode.succeed ())
-        |> BackendTask.allowFatal
+    Script.exec "npx" [ "elm-pages", "run", ".lamdera-db/MigrateChain.elm" ]
 
 
 deepCompare : String -> String -> BackendTask FatalError DeepCompareResult
 deepCompare storedTypes currentTypes =
-    BackendTask.Custom.run "compareBackendModelShape"
-        (Encode.object
-            [ ( "storedTypes", Encode.string storedTypes )
-            , ( "currentTypes", Encode.string currentTypes )
-            ]
-        )
-        (Decode.field "result" Decode.string
-            |> Decode.andThen
-                (\result ->
-                    case result of
-                        "Same" ->
-                            Decode.succeed Same
-
-                        "Different" ->
-                            Decode.succeed Different
-
-                        "Error" ->
-                            Decode.field "message" Decode.string
-                                |> Decode.map DeepCheckError
-
-                        _ ->
-                            Decode.fail ("Unknown deep compare result: " ++ result)
-                )
-        )
-        |> BackendTask.allowFatal
+    LamderaDb.DeepCompare.compareBackendModelShape
+        { storedTypes = storedTypes
+        , currentTypes = currentTypes
+        }
 
 
 envelopeDecoder : Decode.Decoder { v : Int, t : Maybe String, d : String }

@@ -2,11 +2,11 @@
   "name": "lamdera-db",
   "private": true,
   "scripts": {
-    "test": "bash test.sh",
+    "test": "elm-pages run script/Test.elm",
     "script": "elm-pages run",
     "migrate": "elm-pages run .lamdera-db/Migrate.elm",
     "skill:install": "bash script/install-codex-skill.sh evergreen-migration-assist",
-    "skill:validate": "bash script/validate-codex-skill.sh evergreen-migration-assist"
+    "skill:validate": "elm-pages run script/ValidateSkill.elm -- evergreen-migration-assist"
   },
   "devDependencies": {
     "elm-pages": "^3.1.5",
