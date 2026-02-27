@@ -5,6 +5,7 @@ import BackendTask.File
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import LamderaDb.DeepCompare exposing (DeepCompareResult(..))
+import LamderaDb.Lock
 import LamderaDb.Snapshot
 import Pages.Script as Script exposing (Script)
 import SchemaVersion
@@ -20,27 +21,31 @@ type AutoSnapshotResult
 run : Script
 run =
     Script.withoutCliOptions
-        (checkAndAutoSnapshot
-            |> BackendTask.andThen
-                (\result ->
-                    case result of
-                        NoDb ->
-                            Script.log "No db.bin found. Nothing to migrate."
-
-                        UpToDate ->
-                            Script.log "Already up to date. No migration needed."
-
-                        SnapshotCreated { newVersion } ->
-                            Script.log
-                                ("Snapshot created. Edit src/Evergreen/Migrate/V"
-                                    ++ String.fromInt newVersion
-                                    ++ ".elm to implement the migration, then run: npm run migrate"
-                                )
-
-                        MigrationPending ->
-                            runMigrationChain
-                )
+        (LamderaDb.Lock.withLock
+            (checkAndAutoSnapshot
+                |> BackendTask.andThen handleResult
+            )
         )
+
+
+handleResult : AutoSnapshotResult -> BackendTask FatalError ()
+handleResult result =
+    case result of
+        NoDb ->
+            Script.log "No db.bin found. Nothing to migrate."
+
+        UpToDate ->
+            Script.log "Already up to date. No migration needed."
+
+        SnapshotCreated { newVersion } ->
+            Script.log
+                ("Snapshot created. Edit src/Evergreen/Migrate/V"
+                    ++ String.fromInt newVersion
+                    ++ ".elm to implement the migration, then run: npm run migrate"
+                )
+
+        MigrationPending ->
+            runMigrationChain
 
 
 checkAndAutoSnapshot : BackendTask FatalError AutoSnapshotResult

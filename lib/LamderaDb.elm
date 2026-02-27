@@ -1,12 +1,14 @@
 module LamderaDb exposing (get, script, update)
 
 import BackendTask exposing (BackendTask)
+import BackendTask.Custom
 import BackendTask.File
 import Base64
 import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import LamderaDb.DeepCompare exposing (DeepCompareResult(..))
+import LamderaDb.Lock
 import LamderaDb.Migration
 import Lamdera.Wire3 as Wire
 import Pages.Script as Script exposing (Script)
@@ -17,8 +19,10 @@ import Types exposing (BackendModel, initialBackendModel)
 script : BackendTask FatalError () -> Script
 script task =
     Script.withoutCliOptions
-        (checkMigration
-            |> BackendTask.andThen (\_ -> task)
+        (LamderaDb.Lock.withLock
+            (checkMigration
+                |> BackendTask.andThen (\_ -> task)
+            )
         )
 
 
@@ -186,7 +190,9 @@ updateTypesFingerprint currentTypes =
                                                 ]
                                             )
                                 in
-                                Script.writeFile { path = "db.bin", body = updatedJson }
+                                BackendTask.Custom.run "atomicSaveDbState"
+                                    (Encode.string updatedJson)
+                                    (Decode.succeed ())
                                     |> BackendTask.allowFatal
                                     |> BackendTask.quiet
             )

@@ -1,6 +1,7 @@
 module LamderaDb.Migration exposing (readVersioned, writeVersioned)
 
 import BackendTask exposing (BackendTask)
+import BackendTask.Custom
 import BackendTask.File
 import Base64
 import Bytes exposing (Bytes)
@@ -102,6 +103,8 @@ load =
 
 save : String -> BackendTask FatalError ()
 save json =
-    Script.writeFile { path = "db.bin", body = json }
+    BackendTask.Custom.run "atomicSaveDbState"
+        (Encode.string json)
+        (Decode.succeed ())
         |> BackendTask.allowFatal
         |> BackendTask.quiet

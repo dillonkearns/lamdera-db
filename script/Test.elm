@@ -198,6 +198,7 @@ cleanup backupDir =
     restoreV2 backupDir
         |> BackendTask.andThen (\_ -> rmFile "db.bin")
         |> BackendTask.andThen (\_ -> rmFile "db.bin.backup")
+        |> BackendTask.andThen (\_ -> rmFile "db.lock")
         |> BackendTask.andThen (\_ -> rmFile "script/TestVerifyV3.elm")
         |> BackendTask.andThen (\_ -> rmFile ".lamdera-db/LamderaDbDeepCheckTmpTypes.elm")
         |> BackendTask.andThen (\_ -> rmFile ".lamdera-db/LamderaDbDeepCheckTmpWitness.elm")
@@ -234,6 +235,8 @@ runAllPhases backupDir =
         |> BackendTask.andThen (\_ -> phase4e backupDir)
         |> BackendTask.andThen (\_ -> phase4f backupDir)
         |> BackendTask.andThen (\_ -> phase4g backupDir)
+        |> BackendTask.andThen (\_ -> phase4h backupDir)
+        |> BackendTask.andThen (\_ -> phase4i backupDir)
         |> BackendTask.andThen (\_ -> phase5 backupDir)
         |> BackendTask.andThen (\_ -> phase5b backupDir)
         |> BackendTask.andThen (\_ -> phase6 backupDir)
@@ -442,6 +445,50 @@ phase4g backupDir =
                         )
             )
         |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4g: Deep comparator failure correctly fails closed")
+        |> BackendTask.andThen (\_ -> restoreV2 backupDir)
+
+
+
+-- Phase 4h: Corrupt db.bin envelope
+
+
+phase4h : String -> BackendTask FatalError ()
+phase4h backupDir =
+    restoreV2 backupDir
+        |> BackendTask.andThen (\_ -> rmFile "db.bin")
+        |> BackendTask.andThen (\_ -> elmPagesRun "script/SeedDb.elm")
+        |> BackendTask.andThen
+            (\_ ->
+                Script.exec "node"
+                    [ "-e"
+                    , "require('fs').writeFileSync('db.bin', 'this is not valid json!!!');"
+                    ]
+            )
+        |> BackendTask.andThen (\_ -> elmPagesRunCapture "script/MigrationTest.elm")
+        |> BackendTask.andThen
+            (\{ output } ->
+                assertContains "Corrupt db.bin should report decode error" "decode" output
+                    |> BackendTask.andThen (\_ -> assertNotContains "Corrupt db.bin should not load model" "BackendModel loaded" output)
+            )
+        |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4h: Corrupt db.bin correctly produces decode error")
+        |> BackendTask.andThen (\_ -> restoreV2 backupDir)
+
+
+
+-- Phase 4i: get returns initialBackendModel when no db.bin
+
+
+phase4i : String -> BackendTask FatalError ()
+phase4i backupDir =
+    restoreV2 backupDir
+        |> BackendTask.andThen (\_ -> rmFile "db.bin")
+        |> BackendTask.andThen (\_ -> elmPagesRunCapture "script/MigrationTest.elm")
+        |> BackendTask.andThen
+            (\{ output } ->
+                assertContains "No db.bin should return initialBackendModel" "todos: 0" output
+                    |> BackendTask.andThen (\_ -> assertContains "No db.bin should return initialBackendModel" "nextId: 1" output)
+            )
+        |> BackendTask.andThen (\_ -> Script.log "✓ Phase 4i: No db.bin correctly returns initialBackendModel (todos: 0, nextId: 1)")
         |> BackendTask.andThen (\_ -> restoreV2 backupDir)
 
 
